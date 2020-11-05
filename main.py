@@ -44,7 +44,7 @@ async def on_voice_state_update(member, old, new):
                     if c.id == TEXT_CHANNEL:
                         channel = c
 
-                await channel.send("https://github.com/kubagp1/podkowa/image.gif", delete_after=audio_length*2)
+                await channel.send("https://raw.githubusercontent.com/kubagp1/podkowa/master/image.gif", delete_after=audio_length*2)
 
                 vcon = await old.channel.connect()
 
