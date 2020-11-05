@@ -48,9 +48,12 @@ async def on_voice_state_update(member, old, new):
 
                 vcon = await old.channel.connect()
 
+                global audioDiscord
+
                 vcon.play(audioDiscord)
 
                 time.sleep(audio_length)
                 await vcon.disconnect()
+                audioDiscord = discord.FFmpegPCMAudio("playme.mp3")
 
 client.run(KEY)
