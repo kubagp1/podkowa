@@ -1,59 +1,129 @@
+CONFIG_FILE_PATH = 'config.json'
+
 import json
-KEY = json.load(open('config.json'))['key']
-GUILD_ID = json.load(open('config.json'))['guild']
-USER_ID = json.load(open('config.json'))['user']
-GOOD_USER_ID = json.load(open('config.json'))['goodUser']
-TEXT_CHANNEL = json.load(open('config.json'))['textChannel']
+import discord
+import mutagen.mp3
+import time
 
-import discord, time
+class App():
+    def __init__(self, confFilePath):
 
-intents = discord.Intents.default()
-intents.members = True
-client = discord.Client(intents=intents)
+        # Config
+        self.configFile = open(confFilePath)
+        self.config = json.load(self.configFile)
+        self.configFile.close()
+        self.validateConfig(self.config)
 
-ourGuild = None
-goodUser = None
+        self.audio = discord.FFmpegPCMAudio("playme.mp3") # Preload to minimize latency
+        # we need to reload discord for some reason nedds to reload this variable every time it plays
 
-@client.event
-async def on_ready():
-    print('We have logged in as {0.user}'.format(client))
+        audio = mutagen.mp3.MP3("playme.mp3")
+        self.audioLength = audio.info.length
 
-    global ourGuild, goodUser
+        # Set up client
+        intents = discord.Intents.default()
+        intents.members = True
 
-    for guild in client.guilds:
-        if guild.id == GUILD_ID:
-            ourGuild = guild
+        self.client = discord.Client(intents=intents)
 
-    for member in ourGuild.members:
-        if member.id == GOOD_USER_ID:
-            goodUser = member
+        self.client.event(self.on_voice_state_update)
+        self.client.event(self.on_ready)
+        self.client.event(self.on_message)
 
-from mutagen.mp3 import MP3
+        self.client.run(self.config['key'])
+
+    @staticmethod
+    def validateConfig(c):
+        # Convert dict to list with only key names and to list with only values
+        names = []
+        values = []
+        configs = []
+        for conf in c.items():
+            names.append(conf[0])
+            values.append(conf[1])
+            configs.append(conf)
 
 
-audio = MP3("playme.mp3")
-audio_length = audio.info.length
-audioDiscord = discord.FFmpegPCMAudio("playme.mp3")
+        valids = [('key', str),
+            ('badUserId', int), 
+            ('message', str), 
+            ('goodUserId', int), 
+            ('textChannelId', int)] # Valid config names and types
 
-@client.event
-async def on_voice_state_update(member, old, new):
-    if member.id == USER_ID:
-        if new.channel != goodUser.voice.channel:
-            if old.channel == goodUser.voice.channel:
-                for c in old.channel.guild.text_channels:
-                    if c.id == TEXT_CHANNEL:
-                        channel = c
+        validNames = []
+        for valid in valids:
+            validNames.append(valid[0]) # Extract just names from v
 
-                await channel.send("https://raw.githubusercontent.com/kubagp1/podkowa/master/image.gif", delete_after=audio_length*2)
+        for validName in validNames:
+            if validName not in names:
+                raise Exception('There is "{}" missing in config file'.format(validName))
 
-                vcon = await old.channel.connect()
+        for config in configs:
+            if config[0] not in validNames:
+                continue
+            else:
+                index = validNames.index(config[0])
 
-                global audioDiscord
+                if type(config[1]) != valids[index][1]:
+                    raise Exception('Type of "{}" in config is {} and not {}'.format(
+                        names[index], 
+                        type(config[1]).__name__, 
+                        valids[index][1].__name__))
 
-                vcon.play(audioDiscord)
+    async def on_ready(self):
+        print('We have logged in as {0.user}'.format(self.client))
 
-                time.sleep(audio_length)
-                await vcon.disconnect()
-                audioDiscord = discord.FFmpegPCMAudio("playme.mp3")
+        self.goodUser = None
+        for guild in self.client.guilds:
+            if self.goodUser: break
+            for member in guild.members:
+                if member.id == self.config['goodUserId']:
+                    self.goodUser = member
+                    break
+        if not self.goodUser:
+            raise Exception("Good user not found")
+        else:
+            print("Good user: {}".format(self.goodUser))
 
-client.run(KEY)
+        self.textChannel = None
+        for guild in self.client.guilds:
+            if self.textChannel: break
+            for textChannel in guild.text_channels:
+                if textChannel.id == self.config['textChannelId']:
+                    self.textChannel = textChannel
+                    break
+        if not self.textChannel:
+            raise Exception("Text channel not found")
+        else:
+            print("Text channel: {}".format(self.textChannel))
+
+    async def on_voice_state_update(self, member, old, new):
+        if member.id == self.config['badUserId'] and \
+        new.channel != self.goodUser.voice.channel and \
+        old.channel == self.goodUser.voice.channel:
+            await self.badLeft(old.channel)
+    
+    async def on_message(self, message):
+        if message.content.lower() == "podkowa trigger":
+            if message.author.id == self.config['badUserId']:
+                await message.channel.send("Nie dla psa")
+                return
+            elif not message.author.voice:
+                await message.channel.send("Nie ma cie na vc debilu -_-")
+                return
+            else:
+                await message.channel.send("Ok szefie")
+                await self.badLeft(message.author.voice.channel)
+
+    async def badLeft(self, channel):
+        await self.textChannel.send(self.config['message'], delete_after=self.audioLength*2)
+
+        vcon = await channel.connect()
+        vcon.play(self.audio)
+        time.sleep(self.audioLength)
+        await vcon.disconnect()
+
+        self.audio = discord.FFmpegPCMAudio("playme.mp3") # Reload audio
+
+if __name__ == "__main__":
+    app = App(CONFIG_FILE_PATH)    
