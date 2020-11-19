@@ -4,6 +4,7 @@ import json
 import discord
 import mutagen.mp3
 import time
+import sqlite3
 
 class App():
     def __init__(self, confFilePath):
@@ -15,10 +16,24 @@ class App():
         self.validateConfig(self.config)
 
         self.audio = discord.FFmpegPCMAudio("playme.mp3") # Preload to minimize latency
-        # we need to reload discord for some reason nedds to reload this variable every time it plays
+        # we need to reload bcs discord for some reason needs to reload this variable every time it plays
 
         audio = mutagen.mp3.MP3("playme.mp3")
         self.audioLength = audio.info.length
+
+        # Set up sqlite for swearcounter
+
+        self.db = sqlite3.connect('db.sqlite')
+        self.c = self.db.cursor()
+
+        self.c.execute('''
+            CREATE TABLE IF NOT EXISTS swearsCount (
+                id integer PRIMARY KEY,
+                swears interger NOT NULL
+            );
+        ''')
+
+        self.db.commit()
 
         # Set up client
         intents = discord.Intents.default()
@@ -114,6 +129,35 @@ class App():
             else:
                 await message.channel.send("Ok szefie")
                 await self.badLeft(message.author.voice.channel)
+        
+        elif message.content.startswith('#s'):
+            if message.mentions:
+                for mention in message.mentions:
+                    await message.channel.send('{} ma zrobić {} pompek/ki/kę'.format(mention.display_name, self.getSwears(mention.id)))
+            else:
+                    await message.channel.send('{} ma zrobić {} pompek/ki/kę'.format(message.author.display_name, self.getSwears(message.author.id)))
+            await message.delete()
+
+        elif message.content.startswith('#0'):
+            if message.mentions:
+                for mention in message.mentions:
+                    self.resetSwears(mention.id)
+            else:
+                self.resetSwears(message.author.id)
+            await message.delete()
+
+        elif message.content.startswith("#"):
+            t = message.content.split()
+            if message.mentions:
+                for mention in message.mentions:
+                    if len(t) == 2:
+                        self.addSwear(mention.id, 1)
+                    elif len(t) == 3:
+                        self.addSwear(mention.id, int(t[2]))
+            elif len(t) == 2:
+                self.addSwear(message.author.id, int(t[1]))
+
+            await message.delete()
 
     async def badLeft(self, channel):
         await self.textChannel.send(self.config['message'], delete_after=self.audioLength*2)
@@ -124,6 +168,23 @@ class App():
         await vcon.disconnect()
 
         self.audio = discord.FFmpegPCMAudio("playme.mp3") # Reload audio
+
+    def addSwear(self, memberId, s):
+        if self.c.execute('SELECT COUNT(*) FROM swearsCount WHERE id = {}'.format(memberId)).fetchone()[0] == 1: # If there is member in db
+            self.c.execute('UPDATE swearsCount SET swears = {} WHERE id = {}'.format(
+                self.c.execute('SELECT swears FROM swearsCount WHERE id = {}'.format(memberId)).fetchone()[0]+s, 
+                memberId)
+            )
+        else: # If there is not yet 
+            self.c.execute('INSERT INTO swearsCount VALUES ({}, {})'.format(memberId, s))
+        self.db.commit()
+
+    def getSwears(self, memberId):
+        return self.c.execute('SELECT swears FROM swearsCount WHERE id = {}'.format(memberId)).fetchone()[0]
+    
+    def resetSwears(self, memberId):
+        self.c.execute('UPDATE swearsCount SET swears = 0 WHERE id = {}'.format(memberId))
+        self.db.commit()
 
 if __name__ == "__main__":
     app = App(CONFIG_FILE_PATH)    
