@@ -62,7 +62,7 @@ class App():
         valids = [('key', str),
             ('badUserId', int), 
             ('message', str), 
-            ('goodUserId', int), 
+            ('goodUsersIds', list), 
             ('textChannelId', int)] # Valid config names and types
 
         validNames = []
@@ -88,17 +88,17 @@ class App():
     async def on_ready(self):
         print('We have logged in as {0.user}'.format(self.client))
 
-        self.goodUser = None
-        for guild in self.client.guilds:
-            if self.goodUser: break
-            for member in guild.members:
-                if member.id == self.config['goodUserId']:
-                    self.goodUser = member
-                    break
-        if not self.goodUser:
-            raise Exception("Good user not found")
-        else:
-            print("Good user: {}".format(self.goodUser))
+        # self.goodUser = None
+        # for guild in self.client.guilds:
+        #     if self.goodUser: break
+        #     for member in guild.members:
+        #         if member.id == self.config['goodUserId']:
+        #             self.goodUser = member
+        #             break
+        # if not self.goodUser:
+        #     raise Exception("Good user not found")
+        # else:
+        #     print("Good user: {}".format(self.goodUser))
 
         self.textChannel = None
         for guild in self.client.guilds:
@@ -114,9 +114,11 @@ class App():
 
     async def on_voice_state_update(self, member, old, new):
         if member.id == self.config['badUserId'] and \
-        new.channel != self.goodUser.voice.channel and \
-        old.channel == self.goodUser.voice.channel:
-            await self.badLeft(old.channel)
+        new.channel != old.channel:
+            for oldMember in old.channel.members:
+                if oldMember.id in self.config['goodUsersIds']:
+                    await self.badLeft(old.channel)
+                    break
     
     async def on_message(self, message):
         if message.content.lower() == "podkowa trigger":
