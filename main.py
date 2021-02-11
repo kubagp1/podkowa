@@ -5,6 +5,9 @@ import discord
 import mutagen.mp3
 import time
 import sqlite3
+import ctypes
+import ctypes.util
+import random
 
 class App():
     def __init__(self, confFilePath):
@@ -17,6 +20,18 @@ class App():
 
         self.audio = discord.FFmpegPCMAudio("playme.mp3") # Preload to minimize latency
         # we need to reload bcs discord for some reason needs to reload this variable every time it plays
+        
+        print("ctypes - Find opus:")
+        a = ctypes.util.find_library('opus')
+        print(a)
+        
+        print("Discord - Load Opus:")
+        b = discord.opus.load_opus(a)
+        print(b)
+        
+        print("Discord - Is loaded:")
+        c = discord.opus.is_loaded()
+        print(c)
 
         audio = mutagen.mp3.MP3("playme.mp3")
         self.audioLength = audio.info.length
@@ -121,6 +136,9 @@ class App():
                     break
     
     async def on_message(self, message):
+        if message.author.id == 249836758009643008 and random.randrange(0,100)<60:
+            message.delete()
+
         if message.content.lower() == "podkowa trigger":
             if message.author.id == self.config['badUserId']:
                 await message.channel.send("Nie dla psa")
