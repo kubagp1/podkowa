@@ -137,7 +137,7 @@ class App():
     
     async def on_message(self, message):
         if message.author.id == 249836758009643008 and random.randrange(0,100)<60:
-            message.delete()
+            await message.delete()
 
         if message.content.lower() == "podkowa trigger":
             if message.author.id == self.config['badUserId']:
